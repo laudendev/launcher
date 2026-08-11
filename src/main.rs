@@ -1,3 +1,7 @@
+// Suppresses the console window Windows otherwise opens behind a GUI app;
+// ignored (no-op) on non-Windows targets, so it's safe to leave unconditional.
+#![windows_subsystem = "windows"]
+
 mod goo_widget;
 mod style;
 
@@ -18,6 +22,18 @@ const PUBLIC_KEYS_HEX: &[&str] = &[
 ];
 
 const DOWNLOAD_URL: &str = "https://quartermaster.lauden.dev/license/download";
+
+// Shared by both the window sizing (main()) and the form layout
+// (LauncherApp::update()) so the window is always exactly wide enough
+// for the form plus equal margins on every side — one source of truth
+// instead of two numbers that can quietly drift apart.
+const FORM_WIDTH: f32 = 480.0;
+const MARGIN: f32 = 24.0;
+// Content height budget: heading-less top margin + 2-row input (60) +
+// spacing (14) + button (54) + spacing (16) + separator/error slot
+// (~40) + bottom margin. Adjust here if the working/goo state (96px
+// tall) ever needs more room than the idle form does.
+const WINDOW_HEIGHT: f32 = 2.0 * MARGIN + 60.0 + 14.0 + 54.0 + 16.0 + 40.0;
 
 #[derive(Serialize)]
 struct DownloadRequest {
@@ -75,7 +91,11 @@ impl Default for LauncherApp {
 impl LauncherApp {
     fn start_download(&mut self) {
         let pubs = self.pubs.clone();
-        let key_input = self.key_input.clone();
+        // multiline input can pick up stray newlines (Enter key) that
+        // would otherwise silently break verify_any — strip them here
+        // rather than in the TextEdit itself, so what's on screen still
+        // shows exactly what was typed/pasted.
+        let key_input = self.key_input.replace(['\n', '\r'], "");
         let (tx, rx): (Sender<WorkerMsg>, Receiver<WorkerMsg>) = channel();
         self.rx = Some(rx);
 
@@ -174,62 +194,57 @@ impl eframe::App for LauncherApp {
             ctx.request_repaint();
         }
 
-        egui::CentralPanel::default().show(ctx, |ui| {
-            // Single title, living only in the OS titlebar (set in main()
-            // via with_title). No in-window heading — that was the
-            // second/third "title" showing up before.
-            ui.add_space(20.0);
+        // Single margin value drives every side — this is what actually
+        // makes left/right/top/bottom spacing equal, rather than the old
+        // approach of separate add_space calls that happened to look
+        // close but weren't tied to the same number.
+        egui::CentralPanel::default()
+            .frame(egui::Frame::none().inner_margin(MARGIN).fill(ctx.style().visuals.panel_fill))
+            .show(ctx, |ui| {
+                // Single title, living only in the OS titlebar (set in
+                // main() via with_title). No in-window heading — that was
+                // the second/third "title" showing up before.
 
-            let working = self.rx.is_some();
+                let working = self.rx.is_some();
 
-            // Left-aligned form block, indented from the panel edge —
-            // not centered. vertical_centered was pulling the text edit
-            // to the middle of the window; a plain indented vertical
-            // layout reads as a normal left-to-right form instead.
-            ui.horizontal(|ui| {
-                ui.add_space(40.0);
+                // form_width-wide column, no extra left/right add_space —
+                // the frame's inner_margin above already provides equal
+                // spacing on every side, so the content here just needs to
+                // be exactly form_width wide to stay symmetric.
                 ui.vertical(|ui| {
                     // Once a download starts, the key input disappears
                     // entirely (not just disabled) so the goo animation
                     // is the only thing in view — matches a real
                     // "working" state instead of a greyed-out form.
                     if !working {
-                        let input_width = 280.0;
-                        ui.horizontal(|ui| {
-                            // Built here, not before the closure — building
-                            // it earlier held a mutable borrow of
-                            // self.key_input open for the closure's whole
-                            // body, which then collided with the second
-                            // &mut self.key_input the Paste button needs
-                            // below (E0499).
-                            let edit = egui::TextEdit::singleline(&mut self.key_input).hint_text(
-                                if self.key_hint_dismissed {
-                                    ""
-                                } else {
-                                    "Paste your license key"
-                                },
-                            );
-                            let response = ui.add_sized([input_width, 32.0], edit);
-                            // Hint clears as soon as the field is clicked
-                            // into, not only once typing starts (egui's
-                            // actual default) — matches normal form-field
-                            // behavior.
-                            if response.gained_focus() {
-                                self.key_hint_dismissed = true;
-                            }
-                            // egui's TextEdit has no right-click context
-                            // menu (Ctrl+V still works) — this button is
-                            // the explicit, discoverable paste path for
-                            // anyone reaching for right-click out of habit.
-                            if ui.add_sized([70.0, 32.0], egui::Button::new("Paste")).clicked() {
-                                if let Ok(mut clipboard) = arboard::Clipboard::new() {
-                                    if let Ok(text) = clipboard.get_text() {
-                                        self.key_input = text.trim().to_string();
-                                        self.key_hint_dismissed = true;
-                                    }
-                                }
-                            }
-                        });
+                        // multiline + desired_rows so a long key wraps
+                        // across a couple of lines and stays fully
+                        // visible, instead of singleline's horizontal
+                        // scroll hiding most of a long key from view.
+                        let edit = egui::TextEdit::multiline(&mut self.key_input)
+                            .desired_rows(2)
+                            .hint_text(if self.key_hint_dismissed {
+                                ""
+                            } else {
+                                "Paste your license key"
+                            });
+                        let response = ui.add_sized([FORM_WIDTH, 60.0], edit);
+                        // Hint clears as soon as the field is clicked
+                        // into, not only once typing starts (egui's
+                        // actual default) — matches normal form-field
+                        // behavior.
+                        if response.gained_focus() {
+                            self.key_hint_dismissed = true;
+                        }
+                        // A dedicated Paste button was here, but
+                        // arboard's clipboard read fails on this
+                        // machine's Wayland session (MIME negotiation
+                        // issue, not fixed by updating to the latest
+                        // arboard 3.6.1) and wl-clipboard can't be
+                        // installed due to a broken repo signature.
+                        // Ctrl+V already works natively in TextEdit,
+                        // so this isn't blocking — revisit if arboard
+                        // fixes the underlying issue upstream.
                         ui.add_space(14.0);
 
                         // "Lights up" once there's real (non-whitespace)
@@ -238,7 +253,7 @@ impl eframe::App for LauncherApp {
                         let has_key = !self.key_input.trim().is_empty();
                         ui.add_enabled_ui(has_key, |ui| {
                             if ui
-                                .add_sized([160.0, 36.0], egui::Button::new("Download"))
+                                .add_sized([FORM_WIDTH, 54.0], egui::Button::new("Download"))
                                 .clicked()
                             {
                                 self.start_download();
@@ -248,7 +263,7 @@ impl eframe::App for LauncherApp {
                     }
 
                     match &self.status {
-                        Status::Idle => {}
+                        Status::Idle | Status::Error(_) => {}
                         Status::Working(license) => {
                             // Animated trailing dots: cycles 0..3 dots,
                             // ~2 per second, driven off egui's frame
@@ -267,13 +282,25 @@ impl eframe::App for LauncherApp {
                                 format!("Downloaded {}", filename),
                             );
                         }
-                        Status::Error(msg) => {
-                            ui.colored_label(egui::Color32::RED, msg);
-                        }
                     }
+
+                    // Dedicated error slot: fixed height, reserved whether
+                    // or not there's an error, so an error appearing or
+                    // clearing doesn't shift anything else in the layout.
+                    // Lives inside this same vertical column (not the
+                    // panel directly) so it shares the same width and
+                    // margins as the form above it, keeping everything
+                    // aligned to one consistent column.
+                    ui.add_space(8.0);
+                    ui.separator();
+                    let error_height = 28.0;
+                    ui.allocate_ui(egui::vec2(FORM_WIDTH, error_height), |ui| {
+                        if let Status::Error(msg) = &self.status {
+                            ui.colored_label(egui::Color32::from_rgb(0xE0, 0x4F, 0x4F), msg);
+                        }
+                    });
                 });
             });
-        });
     }
 }
 
@@ -296,9 +323,14 @@ fn load_icon() -> egui::IconData {
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([420.0, 220.0])
+            .with_inner_size([FORM_WIDTH + 2.0 * MARGIN, WINDOW_HEIGHT])
             .with_title("Launcher | shop.lauden.dev")
-            .with_icon(load_icon()),
+            .with_icon(load_icon())
+            // Matches StartupWMClass in packaging/lauden-launcher.desktop —
+            // this is what lets KDE/KWin under Wayland match this running
+            // window to that desktop entry (and its registered icon)
+            // rather than guessing from the binary name.
+            .with_app_id("lauden-launcher"),
         ..Default::default()
     };
     eframe::run_native(

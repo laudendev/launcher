@@ -87,7 +87,7 @@ pub fn apply(ctx: &egui::Context) {
     // raw, fully-saturated color — the un-dimmed accent read as too
     // bright/alert-colored at rest, and hover was compounding that by
     // lightening an already-bright base further.
-    let button_rest = darken(accent, 0.15);
+    let button_rest = darken(accent, 0.30);
     v.widgets.inactive.weak_bg_fill = button_rest;
     v.widgets.inactive.fg_stroke = Stroke::new(1.0_f32, button_text);
     v.widgets.hovered.weak_bg_fill = lighten(button_rest, 0.08);
