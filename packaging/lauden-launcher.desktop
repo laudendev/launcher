@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Lauden.dev Launcher
+Comment=Download and activate your Lauden.dev product
+Exec=/home/tylerl/lauden.dev/launcher/target/release/lauden-dev-launcher
+Icon=lauden-launcher
+Terminal=false
+Categories=Utility;
+StartupWMClass=lauden-launcher
