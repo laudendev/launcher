@@ -15,7 +15,7 @@
 // the OS reports a dark preference, same trigger as the CSS media query.
 
 use eframe::egui;
-use egui::{Color32, Rounding, Stroke};
+use egui::{Color32, CornerRadius, Stroke};
 
 // Light mode (CSS defaults, no @media override).
 const LIGHT_BG: Color32 = Color32::from_rgb(0xFA, 0xFA, 0xFC);
@@ -38,13 +38,24 @@ const DARK_BUTTON_TEXT: Color32 = Color32::from_rgb(0x0A, 0x0A, 0x0F); // matche
 const RADIUS: u8 = 10; // --radius
 const RADIUS_SM: u8 = 6; // --radius-sm
 
+pub fn apply(ctx: &egui::Context) {
+    // Newer egui keeps separate dark/light styles rather than one
+    // mutable global style, so theme changes don't clobber each
+    // other's customizations. We apply our theme to both, since this
+    // app doesn't offer in-app theme switching — whichever the OS
+    // reports at startup is genuinely the only one that'll ever render.
+    for theme in [egui::Theme::Dark, egui::Theme::Light] {
+        apply_to_theme(ctx, theme);
+    }
+}
+
 /// Applies the theme to `ctx`. Call once, e.g. from `run_native`'s setup
 /// closure or the top of the first frame. Picks light/dark based on the
 /// OS preference eframe reports, mirroring the CSS's
 /// `@media (prefers-color-scheme: dark)` block.
-pub fn apply(ctx: &egui::Context) {
-    let dark = ctx.style().visuals.dark_mode;
-    let mut style = (*ctx.style()).clone();
+fn apply_to_theme(ctx: &egui::Context, theme: egui::Theme) {
+    let dark = theme == egui::Theme::Dark;
+    let mut style = (*ctx.style_of(theme)).clone();
     let v = &mut style.visuals;
 
     let (bg, card_bg, border, ink, ink_soft, accent, button_text) = if dark {
@@ -103,18 +114,18 @@ pub fn apply(ctx: &egui::Context) {
     // field name (pre corner_radius rename) on both Visuals and
     // WidgetVisuals — no top-level window_corner_radius exists here, so
     // window rounding is set via window_rounding instead.
-    let radius = Rounding::same(RADIUS as f32);
-    let radius_sm = Rounding::same(RADIUS_SM as f32);
-    v.window_rounding = radius;
-    v.widgets.noninteractive.rounding = radius;
-    v.widgets.inactive.rounding = radius_sm;
-    v.widgets.hovered.rounding = radius_sm;
-    v.widgets.active.rounding = radius_sm;
+    let radius = CornerRadius::same(RADIUS);
+    let radius_sm = CornerRadius::same(RADIUS_SM);
+    v.window_corner_radius = radius;
+    v.widgets.noninteractive.corner_radius = radius;
+    v.widgets.inactive.corner_radius = radius_sm;
+    v.widgets.hovered.corner_radius = radius_sm;
+    v.widgets.active.corner_radius = radius_sm;
 
     style.spacing.item_spacing = egui::vec2(10.0, 10.0);
     style.spacing.button_padding = egui::vec2(20.0, 10.0);
 
-    ctx.set_style(style);
+    ctx.set_style_of(theme, style);
 }
 
 fn lighten(c: Color32, t: f32) -> Color32 {

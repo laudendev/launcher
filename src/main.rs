@@ -185,26 +185,23 @@ fn run_download(pubs: Vec<VerifyingKey>, key_input: String, tx: Sender<WorkerMsg
 }
 
 impl eframe::App for LauncherApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+               // Single title, living only in the OS titlebar (set in
+                // main() via with_title). No in-window heading — that was
+                // the second/third "title" showing up before.
+fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.poll_worker();
 
         // Request a repaint even with no user input, so the animation
         // keeps moving and we keep checking the channel while waiting.
         if self.rx.is_some() {
-            ctx.request_repaint();
+            ui.ctx().request_repaint();
         }
 
         // Single margin value drives every side — this is what actually
         // makes left/right/top/bottom spacing equal, rather than the old
         // approach of separate add_space calls that happened to look
         // close but weren't tied to the same number.
-        egui::CentralPanel::default()
-            .frame(egui::Frame::none().inner_margin(MARGIN).fill(ctx.style().visuals.panel_fill))
-            .show(ctx, |ui| {
-                // Single title, living only in the OS titlebar (set in
-                // main() via with_title). No in-window heading — that was
-                // the second/third "title" showing up before.
-
+        egui::Frame::new().inner_margin(MARGIN).fill(ui.style().visuals.panel_fill).show(ui, |ui| {
                 let working = self.rx.is_some();
 
                 // form_width-wide column, no extra left/right add_space —
