@@ -3,7 +3,7 @@
 # Run from the launcher/ repo root: bash packaging/macos/build-app.sh
 set -euo pipefail
 
-APP_NAME="shop.lauden.dev - Launcher"
+APP_NAME="Lauden Launcher"
 BUNDLE="${APP_NAME}.app"
 
 echo "Building release binary..."

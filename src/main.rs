@@ -5,6 +5,7 @@
 mod goo_widget;
 mod style;
 
+use dirs;
 use ed25519_dalek::VerifyingKey;
 use quartermaster_license::{fingerprint::fingerprint, verify_any, License};
 use serde::Serialize;
@@ -160,7 +161,8 @@ fn run_download(pubs: Vec<VerifyingKey>, key_input: String, tx: Sender<WorkerMsg
         }
     };
 
-    let filename = format!("{}.zip", license.product);
+    let downloads_dir = dirs::download_dir().unwrap_or_else(|| std::env::temp_dir());
+    let filename = downloads_dir.join(format!("{}.zip", license.product));
     let file = match fs::File::create(&filename) {
         Ok(f) => f,
         Err(e) => {
@@ -181,7 +183,7 @@ fn run_download(pubs: Vec<VerifyingKey>, key_input: String, tx: Sender<WorkerMsg
         thread::sleep(MIN_DISPLAY_TIME - elapsed);
     }
 
-    let _ = tx.send(WorkerMsg::Done(filename));
+    let _ = tx.send(WorkerMsg::Done(filename.display().to_string()));
 }
 
 impl eframe::App for LauncherApp {

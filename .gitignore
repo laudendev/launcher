@@ -6,3 +6,7 @@ test-launcher-final
 *.app/
 AppIcon.iconset/
 AppIcon.icns
+
+.DS_Store
+*.dmg
+dmg-staging/

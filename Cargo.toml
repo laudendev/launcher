@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 quartermaster-license = { path = "../quartermaster-license" }
+dirs = "5"
 ed25519-dalek = "2"
 ureq = { version = "2", features = ["json"] }
 serde = { version = "1", features = ["derive"] }
