@@ -1,0 +1,42 @@
+name: Sign Windows Launcher
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  sign-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust Windows target
+        run: rustup target add x86_64-pc-windows-gnu
+
+      - name: Build
+        run: cargo build --release --target x86_64-pc-windows-gnu
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Sign binary
+        uses: azure/trusted-signing-action@v0.5.1
+        with:
+          endpoint: https://eus.codesigning.azure.net/
+          trusted-signing-account-name: laudenslager-signing
+          certificate-profile-name: launcher-release
+          files-folder: target/x86_64-pc-windows-gnu/release
+          files-folder-filter: exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      - name: Upload to release
+        run: gh release upload ${{ github.ref_name }} target/x86_64-pc-windows-gnu/release/*.exe --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
