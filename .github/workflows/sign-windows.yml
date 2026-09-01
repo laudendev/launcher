@@ -10,11 +10,19 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: launcher
+
+      - uses: actions/checkout@v4
+        with:
+          repository: laudendev/quartermaster-license
+          path: quartermaster-license
 
       - name: Install Rust Windows target
         run: rustup target add x86_64-pc-windows-gnu
 
       - name: Build
+        working-directory: launcher
         run: cargo build --release --target x86_64-pc-windows-gnu
 
       - name: Azure login
@@ -30,13 +38,14 @@ jobs:
           endpoint: https://eus.codesigning.azure.net/
           trusted-signing-account-name: laudenslager-signing
           certificate-profile-name: launcher-release
-          files-folder: target/x86_64-pc-windows-gnu/release
+          files-folder: launcher/target/x86_64-pc-windows-gnu/release
           files-folder-filter: exe
           file-digest: SHA256
           timestamp-rfc3161: http://timestamp.acs.microsoft.com
           timestamp-digest: SHA256
 
       - name: Upload to release
+        working-directory: launcher
         run: gh release upload ${{ github.ref_name }} target/x86_64-pc-windows-gnu/release/*.exe --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
