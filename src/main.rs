@@ -320,16 +320,19 @@ fn load_icon() -> egui::IconData {
 }
 
 fn main() -> eframe::Result<()> {
+    let mut wgpu_setup = eframe::egui_wgpu::WgpuSetupCreateNew::without_display_handle();
+    wgpu_setup.power_preference = eframe::wgpu::PowerPreference::HighPerformance;
+
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([FORM_WIDTH + 2.0 * MARGIN, WINDOW_HEIGHT])
             .with_title("Launcher | shop.lauden.dev")
             .with_icon(load_icon())
-            // Matches StartupWMClass in packaging/lauden-launcher.desktop —
-            // this is what lets KDE/KWin under Wayland match this running
-            // window to that desktop entry (and its registered icon)
-            // rather than guessing from the binary name.
             .with_app_id("lauden-launcher"),
+        wgpu_options: eframe::egui_wgpu::WgpuConfiguration {
+            wgpu_setup: eframe::egui_wgpu::WgpuSetup::CreateNew(wgpu_setup),
+            ..Default::default()
+        },
         ..Default::default()
     };
     eframe::run_native(
@@ -341,3 +344,4 @@ fn main() -> eframe::Result<()> {
         }),
     )
 }
+
