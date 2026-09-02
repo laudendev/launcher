@@ -5,7 +5,6 @@ test-launcher-final
 # macOS app bundle build artifacts (regenerate via packaging/macos/build-app.sh)
 *.app/
 AppIcon.iconset/
-AppIcon.icns
 
 .DS_Store
 *.dmg
