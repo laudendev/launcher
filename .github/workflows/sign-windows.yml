@@ -42,8 +42,14 @@ jobs:
           timestamp-rfc3161: http://timestamp.acs.microsoft.com
           timestamp-digest: SHA256
 
-      - name: Upload to release
+      - name: Create or upload release
         working-directory: launcher
-        run: gh release upload ${{ github.ref_name }} target/x86_64-pc-windows-gnu/release/*.exe --clobber
+        shell: bash
+        run: |
+          if gh release view ${{ github.ref_name }} >/dev/null 2>&1; then
+            gh release upload ${{ github.ref_name }} target/x86_64-pc-windows-gnu/release/*.exe --clobber
+          else
+            gh release create ${{ github.ref_name }} target/x86_64-pc-windows-gnu/release/*.exe --title ${{ github.ref_name }} --notes "Automated release"
+          fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
