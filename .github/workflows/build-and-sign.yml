@@ -174,10 +174,23 @@ jobs:
         run: |
           codesign --deep --force --options runtime --sign "Developer ID Application: Laudenslager Software, LLC (NCK97PP88N)" "Lauden Launcher.app"
 
+      - name: Install create-dmg
+        run: brew install create-dmg
+
       - name: Build DMG
         working-directory: launcher
         run: |
-          hdiutil create -volname "Lauden Launcher" -srcfolder "Lauden Launcher.app" -ov -format UDZO Lauden.Launcher.dmg
+          create-dmg \
+            --volname "Lauden Launcher" \
+            --window-pos 200 120 \
+            --window-size 600 400 \
+            --icon-size 100 \
+            --icon "Lauden Launcher.app" 150 190 \
+            --hide-extension "Lauden Launcher.app" \
+            --app-drop-link 450 190 \
+            "Lauden.Launcher.dmg" \
+            "Lauden Launcher.app" \
+          || true
 
       - name: Sign DMG
         working-directory: launcher
