@@ -85,8 +85,8 @@ jobs:
           mkdir -p dist/lauden-dev-launcher
           cp target/x86_64-unknown-linux-gnu/release/lauden-dev-launcher dist/lauden-dev-launcher/
           chmod +x dist/lauden-dev-launcher/lauden-dev-launcher
-          cp README.md dist/lauden-dev-launcher/ 2>/dev/null || true
-          cp lauden-dev-launcher.desktop dist/lauden-dev-launcher/ 2>/dev/null || true
+          cp README.md dist/lauden-dev-launcher/
+          cp lauden-dev-launcher.desktop dist/lauden-dev-launcher/
           tar -czf lauden-dev-launcher-linux.tar.gz -C dist lauden-dev-launcher
 
       - name: Create or upload release
@@ -97,6 +97,114 @@ jobs:
             gh release upload ${{ github.ref_name }} lauden-dev-launcher-linux.tar.gz --clobber
           else
             gh release create ${{ github.ref_name }} lauden-dev-launcher-linux.tar.gz --title ${{ github.ref_name }} --notes "Automated release"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  sign-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: launcher
+
+      - uses: actions/checkout@v4
+        with:
+          repository: laudendev/quartermaster-license
+          path: quartermaster-license
+
+      - name: Install Rust macOS target
+        run: rustup target add aarch64-apple-darwin
+
+      - name: Build
+        working-directory: launcher
+        run: cargo build --release --target aarch64-apple-darwin
+
+      - name: Import signing certificate
+        env:
+          MACOS_CERT_P12_BASE64: ${{ secrets.MACOS_CERT_P12_BASE64 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          echo "$MACOS_CERT_P12_BASE64" | base64 --decode > certificate.p12
+          security create-keychain -p actions build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p actions build.keychain
+          security import certificate.p12 -k build.keychain -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k actions build.keychain
+          rm certificate.p12
+
+      - name: Assemble .app bundle
+        working-directory: launcher
+        run: |
+          mkdir -p "Lauden Launcher.app/Contents/MacOS"
+          mkdir -p "Lauden Launcher.app/Contents/Resources"
+          cp target/aarch64-apple-darwin/release/lauden-dev-launcher "Lauden Launcher.app/Contents/MacOS/"
+          cp AppIcon.icns "Lauden Launcher.app/Contents/Resources/"
+          cat > "Lauden Launcher.app/Contents/Info.plist" << 'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+          	<key>CFBundleName</key>
+          	<string>shop.lauden.dev - Launcher</string>
+          	<key>CFBundleDisplayName</key>
+          	<string>shop.lauden.dev - Launcher</string>
+          	<key>CFBundleIdentifier</key>
+          	<string>dev.lauden.launcher</string>
+          	<key>CFBundleVersion</key>
+          	<string>0.1.0</string>
+          	<key>CFBundleShortVersionString</key>
+          	<string>0.1.0</string>
+          	<key>CFBundlePackageType</key>
+          	<string>APPL</string>
+          	<key>CFBundleExecutable</key>
+          	<string>lauden-dev-launcher</string>
+          	<key>CFBundleIconFile</key>
+          	<string>AppIcon.icns</string>
+          	<key>LSMinimumSystemVersion</key>
+          	<string>11.0</string>
+          	<key>NSHighResolutionCapable</key>
+          	<true/>
+          </dict>
+          </plist>
+          EOF
+
+      - name: Sign app
+        working-directory: launcher
+        run: |
+          codesign --deep --force --options runtime --sign "Developer ID Application: Laudenslager Software, LLC (NCK97PP88N)" "Lauden Launcher.app"
+
+      - name: Build DMG
+        working-directory: launcher
+        run: |
+          hdiutil create -volname "Lauden Launcher" -srcfolder "Lauden Launcher.app" -ov -format UDZO Lauden.Launcher.dmg
+
+      - name: Sign DMG
+        working-directory: launcher
+        run: |
+          codesign --sign "Developer ID Application: Laudenslager Software, LLC (NCK97PP88N)" Lauden.Launcher.dmg
+
+      - name: Notarize
+        working-directory: launcher
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          xcrun notarytool submit Lauden.Launcher.dmg \
+            --apple-id "$APPLE_ID" \
+            --team-id NCK97PP88N \
+            --password "$APPLE_APP_PASSWORD" \
+            --wait
+          xcrun stapler staple Lauden.Launcher.dmg
+
+      - name: Create or upload release
+        working-directory: launcher
+        shell: bash
+        run: |
+          if gh release view ${{ github.ref_name }} >/dev/null 2>&1; then
+            gh release upload ${{ github.ref_name }} Lauden.Launcher.dmg --clobber
+          else
+            gh release create ${{ github.ref_name }} Lauden.Launcher.dmg --title ${{ github.ref_name }} --notes "Automated release"
           fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
