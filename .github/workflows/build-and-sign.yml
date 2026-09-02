@@ -1,4 +1,4 @@
-name: Sign Windows Launcher
+name: Build and Sign Launcher
 
 on:
   push:
@@ -53,6 +53,50 @@ jobs:
             gh release upload ${{ github.ref_name }} target/x86_64-pc-windows-gnu/release/*.exe --clobber
           else
             gh release create ${{ github.ref_name }} target/x86_64-pc-windows-gnu/release/*.exe --title ${{ github.ref_name }} --notes "Automated release"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: launcher
+
+      - uses: actions/checkout@v4
+        with:
+          repository: laudendev/quartermaster-license
+          path: quartermaster-license
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libwayland-dev libgtk-3-dev
+
+      - name: Install Rust Linux target
+        run: rustup target add x86_64-unknown-linux-gnu
+
+      - name: Build
+        working-directory: launcher
+        run: cargo build --release --target x86_64-unknown-linux-gnu
+
+      - name: Package
+        working-directory: launcher
+        run: |
+          mkdir -p dist/lauden-dev-launcher
+          cp target/x86_64-unknown-linux-gnu/release/lauden-dev-launcher dist/lauden-dev-launcher/
+          chmod +x dist/lauden-dev-launcher/lauden-dev-launcher
+          cp README.md dist/lauden-dev-launcher/ 2>/dev/null || true
+          cp lauden-dev-launcher.desktop dist/lauden-dev-launcher/ 2>/dev/null || true
+          tar -czf lauden-dev-launcher-linux.tar.gz -C dist lauden-dev-launcher
+
+      - name: Create or upload release
+        working-directory: launcher
+        shell: bash
+        run: |
+          if gh release view ${{ github.ref_name }} >/dev/null 2>&1; then
+            gh release upload ${{ github.ref_name }} lauden-dev-launcher-linux.tar.gz --clobber
+          else
+            gh release create ${{ github.ref_name }} lauden-dev-launcher-linux.tar.gz --title ${{ github.ref_name }} --notes "Automated release"
           fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

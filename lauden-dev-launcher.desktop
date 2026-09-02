@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Lauden Launcher
+Comment=Download and manage your Laudenslager Software licenses
+Exec=%h/.local/bin/lauden-dev-launcher
+Icon=lauden-dev-launcher
+Terminal=false
+Categories=Utility;
