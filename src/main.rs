@@ -5,7 +5,6 @@
 mod goo_widget;
 mod style;
 
-use dirs;
 use ed25519_dalek::VerifyingKey;
 use quartermaster_license::{fingerprint::fingerprint, verify_any, License};
 use serde::Serialize;
@@ -40,6 +39,7 @@ const WINDOW_HEIGHT: f32 = 2.0 * MARGIN + 60.0 + 14.0 + 54.0 + 16.0 + 40.0;
 struct DownloadRequest {
     license_key: String,
     fingerprint: String,
+    platform: &'static str,
 }
 
 fn load_public_keys() -> Vec<VerifyingKey> {
@@ -127,6 +127,26 @@ impl LauncherApp {
     }
 }
 
+/// Extracts a safe bare filename from a Content-Disposition header.
+/// Allow-list only: anything that could escape the Downloads directory
+/// (separators, "..", drive letters, leading dot) yields None, and the
+/// caller falls back to "<product>.zip".
+fn download_filename(header: &str) -> Option<String> {
+    let name = header
+        .split(';')
+        .map(str::trim)
+        .find_map(|part| part.strip_prefix("filename="))?
+        .trim_matches('"');
+    let ok = !name.is_empty()
+        && name.len() <= 128
+        && !name.starts_with('.')
+        && !name.contains("..")
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | ' '));
+    ok.then(|| name.to_string())
+}
+
 fn run_download(pubs: Vec<VerifyingKey>, key_input: String, tx: Sender<WorkerMsg>) {
     let start = std::time::Instant::now();
 
@@ -151,6 +171,7 @@ fn run_download(pubs: Vec<VerifyingKey>, key_input: String, tx: Sender<WorkerMsg
     let body = DownloadRequest {
         license_key: key_input,
         fingerprint: fp,
+        platform: std::env::consts::OS,
     };
 
     let response = match ureq::post(DOWNLOAD_URL).send_json(&body) {
@@ -161,8 +182,12 @@ fn run_download(pubs: Vec<VerifyingKey>, key_input: String, tx: Sender<WorkerMsg
         }
     };
 
-    let downloads_dir = dirs::download_dir().unwrap_or_else(|| std::env::temp_dir());
-    let filename = downloads_dir.join(format!("{}.zip", license.product));
+    let name = response
+        .header("Content-Disposition")
+        .and_then(download_filename)
+        .unwrap_or_else(|| format!("{}.zip", license.product));
+    let downloads_dir = dirs::download_dir().unwrap_or_else(std::env::temp_dir);
+    let filename = downloads_dir.join(name);
     let file = match fs::File::create(&filename) {
         Ok(f) => f,
         Err(e) => {
@@ -345,3 +370,28 @@ fn main() -> eframe::Result<()> {
     )
 }
 
+#[cfg(test)]
+mod download_filename_tests {
+    use super::download_filename;
+
+    #[test]
+    fn plain_and_quoted() {
+        assert_eq!(download_filename("attachment; filename=PopFocus.dmg").as_deref(), Some("PopFocus.dmg"));
+        assert_eq!(download_filename("attachment; filename=\"Pop Focus.exe\"").as_deref(), Some("Pop Focus.exe"));
+    }
+
+    #[test]
+    fn rejects_unsafe_names() {
+        for h in [
+            "attachment; filename=../evil.exe",
+            "attachment; filename=a/b.exe",
+            "attachment; filename=a\\b.exe",
+            "attachment; filename=C:evil.exe",
+            "attachment; filename=.hidden",
+            "attachment; filename=",
+            "attachment",
+        ] {
+            assert_eq!(download_filename(h), None, "{h}");
+        }
+    }
+}
