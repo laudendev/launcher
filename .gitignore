@@ -9,3 +9,8 @@ AppIcon.iconset/
 .DS_Store
 *.dmg
 dmg-staging/
+
+# Local build output (CI builds these; releases are on GitHub)
+/dist/
+/msix-staging/
+*.tar.gz
