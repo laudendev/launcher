@@ -260,15 +260,23 @@ fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
                         if response.gained_focus() {
                             self.key_hint_dismissed = true;
                         }
-                        // A dedicated Paste button was here, but
-                        // arboard's clipboard read fails on this
-                        // machine's Wayland session (MIME negotiation
-                        // issue, not fixed by updating to the latest
-                        // arboard 3.6.1) and wl-clipboard can't be
-                        // installed due to a broken repo signature.
-                        // Ctrl+V already works natively in TextEdit,
-                        // so this isn't blocking — revisit if arboard
-                        // fixes the underlying issue upstream.
+                        // Right-click menu. Paste asks the window for the
+                        // clipboard text, which arrives as a paste event for
+                        // the focused field (works on Wayland, where reading
+                        // the clipboard directly does not), so focus the key
+                        // field again after clicking.
+                        response.context_menu(|ui| {
+                            if ui.button("Paste").clicked() {
+                                ui.ctx()
+                                    .send_viewport_cmd(egui::ViewportCommand::RequestPaste);
+                                response.request_focus();
+                                ui.close();
+                            }
+                            if ui.button("Clear").clicked() {
+                                self.key_input.clear();
+                                ui.close();
+                            }
+                        });
                         ui.add_space(14.0);
 
                         // "Lights up" once there's real (non-whitespace)

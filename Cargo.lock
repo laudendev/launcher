@@ -2057,7 +2057,6 @@ dependencies = [
 name = "lauden-dev-launcher"
 version = "0.1.0"
 dependencies = [
- "arboard",
  "dirs",
  "ed25519-dalek",
  "eframe",
