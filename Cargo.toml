@@ -17,4 +17,4 @@ image = "0.25.10"
 
 [profile.release]
 strip = true
-lto = true
+lto = "thin"

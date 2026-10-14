@@ -1,0 +1,72 @@
+name: Warm build cache
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: warm-cache-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: launcher
+      - uses: actions/checkout@v4
+        with:
+          repository: laudendev/quartermaster-license
+          path: quartermaster-license
+      - run: rustup target add x86_64-pc-windows-gnu
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: launcher
+          shared-key: windows-gnu
+      - name: Build
+        working-directory: launcher
+        run: cargo build --release --target x86_64-pc-windows-gnu
+
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: launcher
+      - uses: actions/checkout@v4
+        with:
+          repository: laudendev/quartermaster-license
+          path: quartermaster-license
+      - run: sudo apt-get update && sudo apt-get install -y libwayland-dev libgtk-3-dev
+      - run: rustup target add x86_64-unknown-linux-gnu
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: launcher
+          shared-key: linux-gnu
+      - name: Build
+        working-directory: launcher
+        run: cargo build --release --target x86_64-unknown-linux-gnu
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: launcher
+      - uses: actions/checkout@v4
+        with:
+          repository: laudendev/quartermaster-license
+          path: quartermaster-license
+      - run: rustup target add aarch64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: launcher
+          shared-key: macos-arm
+      - name: Build
+        working-directory: launcher
+        run: cargo build --release --target aarch64-apple-darwin
