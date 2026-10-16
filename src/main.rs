@@ -40,6 +40,8 @@ struct DownloadRequest {
     license_key: String,
     fingerprint: String,
     platform: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    distro: Option<&'static str>,
 }
 
 fn load_public_keys() -> Vec<VerifyingKey> {
@@ -147,6 +149,33 @@ fn download_filename(header: &str) -> Option<String> {
     ok.then(|| name.to_string())
 }
 
+/// "fedora" when this Linux is Fedora or derived from it (Nobara, Bazzite, ...),
+/// so Quartermaster serves the .rpm instead of the .deb. None everywhere else;
+/// servers that predate the field ignore it.
+fn linux_distro() -> Option<&'static str> {
+    if std::env::consts::OS != "linux" {
+        return None;
+    }
+    let text = fs::read_to_string("/etc/os-release")
+        .or_else(|_| fs::read_to_string("/usr/lib/os-release"))
+        .ok()?;
+    is_fedora_family(&text).then_some("fedora")
+}
+
+fn is_fedora_family(os_release: &str) -> bool {
+    os_release.lines().any(|line| {
+        let Some((key, val)) = line.split_once('=') else {
+            return false;
+        };
+        matches!(key.trim(), "ID" | "ID_LIKE")
+            && val
+                .trim()
+                .trim_matches(|c| c == '"' || c == '\'')
+                .split_whitespace()
+                .any(|t| t == "fedora")
+    })
+}
+
 fn run_download(pubs: Vec<VerifyingKey>, key_input: String, tx: Sender<WorkerMsg>) {
     let start = std::time::Instant::now();
 
@@ -172,6 +201,7 @@ fn run_download(pubs: Vec<VerifyingKey>, key_input: String, tx: Sender<WorkerMsg
         license_key: key_input,
         fingerprint: fp,
         platform: std::env::consts::OS,
+        distro: linux_distro(),
     };
 
     let response = match ureq::post(DOWNLOAD_URL).send_json(&body) {
@@ -401,5 +431,25 @@ mod download_filename_tests {
         ] {
             assert_eq!(download_filename(h), None, "{h}");
         }
+    }
+}
+
+#[cfg(test)]
+mod distro_tests {
+    use super::is_fedora_family;
+
+    #[test]
+    fn fedora_family_detected() {
+        assert!(is_fedora_family("NAME=\"Fedora Linux\"\nID=fedora\n"));
+        assert!(is_fedora_family("ID=nobara\nID_LIKE=\"rhel centos fedora\"\n"));
+        assert!(is_fedora_family("ID=bazzite\nID_LIKE='fedora'\n"));
+    }
+
+    #[test]
+    fn others_not_detected() {
+        assert!(!is_fedora_family("ID=ubuntu\nID_LIKE=debian\n"));
+        assert!(!is_fedora_family("ID=debian\n"));
+        assert!(!is_fedora_family("ID=arch\nPRETTY_NAME=\"fedora fan\"\n"));
+        assert!(!is_fedora_family(""));
     }
 }
